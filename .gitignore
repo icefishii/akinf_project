@@ -1,0 +1,39 @@
+# Cabal build artifacts
+dist/
+dist-newstyle/
+cabal.project.local
+cabal.project.local~*
+*.cabal-sandbox/
+*.ghc.environment.*
+
+# Stack build artifacts
+.stack-work/
+
+# Haskell compiled files
+*.hi
+*.o
+*.dyn_o
+*.dyn_hi
+*.prof
+*.aux
+*.hp
+*.eventlog
+
+# Haskell REPL history
+.ghci_history
+.ghc.environment.*
+
+# MacOS
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# Vim/Emacs/VSCode editors
+*~
+*.swp
+*.swo
+*.bak
+*.tmp
+*.vscode/
+.idea/
