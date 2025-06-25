@@ -38,7 +38,7 @@ license:            MIT
 license-file:       LICENSE
 
 -- The package author(s).
-author:             Benjamin Lampart
+author:             Benjamin Lampart, Karim Salem
 
 -- An email address to which users can send suggestions, bug reports, and patches.
 maintainer:         sera@icefish.dev
