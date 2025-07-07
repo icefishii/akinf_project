@@ -10,11 +10,11 @@ import GHC.Generics (Generic)
 
 data Stock = Stock
     { date   :: !String
-    , open   :: !Double
-    , high   :: !Double
-    , low    :: !Double
-    , close  :: !Double
-    , volume :: !Int
+    , open   :: !(Maybe Double)
+    , high   :: !(Maybe Double)
+    , low    :: !(Maybe Double)
+    , close  :: !(Maybe Double)
+    , volume :: !(Maybe Int)
     , name   :: !String
     } deriving (Show, Generic)
 
