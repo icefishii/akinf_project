@@ -1,24 +1,22 @@
-{-# LANGUAGE DeriveGeneric #-}
-
 module AkinfProject.Calculate where
 
--- TODO: remove warnings
 import AkinfProject.CSV (Stock (..))
 import Data.Map.Strict qualified as Map
+import Data.Maybe qualified
 import Data.Ord (comparing)
 import Data.Text qualified as T
 import Data.Vector qualified as V
 
--- | Trend direction enumeration
+-- Trend direction enum
 data TrendDirection = Upward | Downward | Sideways deriving (Show, Eq)
 
--- | Risk level enumeration
+-- Risk level enum
 data RiskLevel = Low | Medium | High deriving (Show, Eq)
 
--- | Moving average signals
+-- Moving average signals
 data MASignal = Bullish | Bearish | Neutral deriving (Show, Eq)
 
--- | Moving averages data
+-- Moving averages data
 data MovingAverages = MovingAverages
   { sma20 :: Maybe Double,
     sma50 :: Maybe Double,
@@ -27,7 +25,7 @@ data MovingAverages = MovingAverages
   }
   deriving (Show)
 
--- | Result type for a stock's comprehensive analysis
+-- Result type for a stock's comprehensive analysis
 data StockAnalysis = StockAnalysis
   { stockName :: String,
     bestDay :: Maybe (String, Double), -- (date, percentage_gain)
@@ -40,7 +38,7 @@ data StockAnalysis = StockAnalysis
   }
   deriving (Show)
 
--- | Portfolio correlation data
+-- Portfolio correlation data
 data PortfolioCorrelation = PortfolioCorrelation
   { correlationMatrix :: Map.Map (String, String) Double,
     averageCorrelation :: Double,
@@ -48,18 +46,20 @@ data PortfolioCorrelation = PortfolioCorrelation
   }
   deriving (Show)
 
--- | Calculate percentage change from open to close
+-- Calculate percentage change from open to close
 percentageChange :: Stock -> Maybe Double
 percentageChange stock = do
-  o <- open stock
-  c <- close stock
-  return $ ((c - o) / o) * 100
+  open <- open stock
+  close <- close stock
+  return $ ((close - open) / open) * 100
 
 -- =============================================================================
 -- MOVING AVERAGES MODULE
 -- =============================================================================
 
--- | Calculate Simple Moving Average for given period
+-- SMA (Simple Moving Average):
+-- Calculates the average closing price of a stock over a specified period.
+-- It smooths out price data to identify trends by averaging recent closing prices.
 calculateSMA :: Int -> V.Vector Stock -> Maybe Double
 calculateSMA period stocks
   | V.length stocks < period = Nothing
@@ -70,7 +70,8 @@ calculateSMA period stocks
             then Just (V.sum validPrices / fromIntegral period)
             else Nothing
 
--- | Calculate all moving averages (20, 50, 200 day)
+-- Calculate all moving averages (20, 50, 200 day)
+-- and determine the overall trend signal based on these averages.
 calculateMovingAverages :: V.Vector Stock -> MovingAverages
 calculateMovingAverages stocks =
   let sma20' = calculateSMA 20 stocks
@@ -79,7 +80,9 @@ calculateMovingAverages stocks =
       signal = determineMASignal sma20' sma50' sma200'
    in MovingAverages sma20' sma50' sma200' signal
 
--- | Determine moving average signal based on crossovers
+-- Signal:
+-- moving averages, or other metrics, used to guide trading decisions.
+-- Determine moving average signal based on crossovers
 determineMASignal :: Maybe Double -> Maybe Double -> Maybe Double -> Maybe MASignal
 determineMASignal (Just sma20) (Just sma50) (Just sma200)
   | sma20 > sma50 && sma50 > sma200 = Just Bullish -- Golden Cross pattern
@@ -91,52 +94,50 @@ determineMASignal _ _ _ = Nothing
 -- BASIC METRICS MODULE
 -- =============================================================================
 
--- | Calculate daily volatility as percentage difference between high and low
+-- Calculate daily volatility as percentage difference between high and low
 dailyVolatility :: Stock -> Maybe Double
 dailyVolatility stock = do
-  h <- high stock
-  l <- low stock
-  o <- open stock
-  return $ ((h - l) / o) * 100
+  high <- high stock
+  low <- low stock
+  open <- open stock
+  return $ ((high - low) / open) * 100
 
 -- =============================================================================
 -- ROI AND TREND ANALYSIS MODULE
 -- =============================================================================
 
--- | Calculate total ROI from first close to last close
+-- Calculate total ROI from first close to last close
 calculateROI :: V.Vector Stock -> Maybe Double
 calculateROI stocks
   | V.null stocks = Nothing
+  | n == 0 = Nothing
+  | n == 1 = Just 0.0
   | otherwise = do
-      let validStocks = V.filter (\s -> case close s of Just _ -> True; Nothing -> False) stocks
-          sortedStocks = V.toList validStocks
-      case sortedStocks of
-        [] -> Nothing
-        [_] -> return 0.0 -- Single stock, no change
-        _ -> do
-          let firstStock = head sortedStocks
-              lastStock = last sortedStocks
-          firstClose <- close firstStock
-          lastClose <- close lastStock
-          return $ ((lastClose - firstClose) / firstClose) * 100
+      firstClose <- close firstStock
+      lastClose <- close lastStock
+      return $ ((lastClose - firstClose) / firstClose) * 100
+  where
+    validStocks = V.filter (Data.Maybe.isJust . close) stocks
+    n = V.length validStocks
+    firstStock = V.head validStocks
+    lastStock = V.last validStocks
 
--- | Detect trend direction based on ROI
+-- Detect trend direction based on ROI
 detectTrend :: V.Vector Stock -> Maybe TrendDirection
 detectTrend stocks = do
   roi <- calculateROI stocks
-  return $
-    if roi > 5.0
-      then Upward
-      else
-        if roi < -5.0
-          then Downward
-          else Sideways
+  return $ trendFromROI roi
+  where
+    trendFromROI x
+      | x > 5.0 = Upward
+      | x < -5.0 = Downward
+      | otherwise = Sideways
 
 -- =============================================================================
 -- RISK ANALYSIS MODULE
 -- =============================================================================
 
--- | Calculate average volatility and determine risk level
+-- Calculate average volatility and determine risk level
 calculateRiskLevel :: V.Vector Stock -> (Maybe Double, Maybe RiskLevel)
 calculateRiskLevel stocks
   | V.null stocks = (Nothing, Nothing)
@@ -148,17 +149,13 @@ calculateRiskLevel stocks
               else Just (V.sum volatilities / fromIntegral (V.length volatilities))
           riskLevel = case avgVolatility of
             Nothing -> Nothing
-            Just avg ->
-              Just $
-                if avg > 8.0
-                  then High
-                  else
-                    if avg > 4.0
-                      then Medium
-                      else Low
+            Just avg
+              | avg > 8.0 -> Just High
+              | avg > 4.0 -> Just Medium
+              | otherwise -> Just Low
        in (avgVolatility, riskLevel)
 
--- | Find the day with highest gain and highest loss for a single stock
+-- Find the day with highest gain and highest loss for a single stock
 analyzeStock :: String -> V.Vector Stock -> StockAnalysis
 analyzeStock stockName stocks
   | V.null stocks =
@@ -172,7 +169,7 @@ analyzeStock stockName stocks
         Nothing
         (MovingAverages Nothing Nothing Nothing Nothing)
   | otherwise =
-      let stocksWithChanges = V.mapMaybe (\s -> fmap (\pc -> (s, pc)) (percentageChange s)) stocks
+      let stocksWithChanges :: V.Vector (Stock, Double) = V.mapMaybe (\stock -> fmap (stock,) (percentageChange stock)) stocks
           (bestDay', worstDay') =
             if V.null stocksWithChanges
               then (Nothing, Nothing)
@@ -194,12 +191,14 @@ analyzeStock stockName stocks
 -- PORTFOLIO CORRELATION MODULE
 -- =============================================================================
 
--- | Calculate daily returns for a stock
+-- Calculate daily returns for a stock
 calculateDailyReturns :: V.Vector Stock -> V.Vector Double
 calculateDailyReturns stocks =
   let stocksList = V.toList stocks
-      pairs = zip stocksList (tail stocksList)
-      returns = map calculateReturn pairs
+      returns =
+        if length stocksList < 2
+          then []
+          else zipWith (curry calculateReturn) stocksList (drop 1 stocksList)
    in V.fromList (catMaybes returns)
   where
     calculateReturn (prev, curr) = do
@@ -210,7 +209,7 @@ calculateDailyReturns stocks =
     catMaybes :: [Maybe a] -> [a]
     catMaybes = foldr (\mx acc -> case mx of Just x -> x : acc; Nothing -> acc) []
 
--- | Calculate correlation coefficient between two return series
+-- Calculate correlation coefficient between two return series
 calculateCorrelation :: V.Vector Double -> V.Vector Double -> Maybe Double
 calculateCorrelation returns1 returns2
   | V.length returns1 /= V.length returns2 || V.null returns1 = Nothing
@@ -227,7 +226,7 @@ calculateCorrelation returns1 returns2
             then Nothing
             else Just (numerator / denominator)
 
--- | Calculate portfolio correlation matrix
+-- Calculate portfolio correlation matrix
 calculatePortfolioCorrelation :: Map.Map String (V.Vector Stock) -> PortfolioCorrelation
 calculatePortfolioCorrelation stockMap =
   let stockNames = Map.keys stockMap
@@ -242,7 +241,7 @@ calculatePortfolioCorrelation stockMap =
             let returns1 = Map.findWithDefault V.empty name1 stockReturns,
             let returns2 = Map.findWithDefault V.empty name2 stockReturns,
             let corr = calculateCorrelation returns1 returns2,
-            corr /= Nothing
+            Data.Maybe.isJust corr
         ]
 
       corrMap = Map.fromList [((name1, name2), fromJust corr) | (name1, name2, corr) <- correlations]
@@ -262,12 +261,11 @@ calculatePortfolioCorrelation stockMap =
       | avg < 0.7 = "Moderately Diversified"
       | otherwise = "Poorly Diversified"
 
--- | Analyze all stocks in the filtered data
+-- Analyze all stocks in the filtered data
 analyzeAllStocks :: Map.Map String (V.Vector Stock) -> [StockAnalysis]
-analyzeAllStocks stockMap =
-  Map.foldrWithKey (\stockName stocks acc -> analyzeStock stockName stocks : acc) [] stockMap
+analyzeAllStocks = Map.foldrWithKey (\stockName stocks acc -> analyzeStock stockName stocks : acc) []
 
--- | Comprehensive portfolio analysis including correlations
+-- Comprehensive portfolio analysis including correlations
 analyzePortfolio :: Map.Map String (V.Vector Stock) -> ([StockAnalysis], PortfolioCorrelation)
 analyzePortfolio stockMap =
   let stockAnalyses = analyzeAllStocks stockMap
