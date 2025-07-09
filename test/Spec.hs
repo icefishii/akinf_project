@@ -1,15 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-import Test.Tasty
-import Test.Tasty.HUnit
-
--- Import property tests
-import PropertyTests (completePropertyTests)
-
--- Import your CSV test functions
 import AkinfProject.CSV (Stock (..), parseStocksFromBytes)
--- Import your Config types and YAML parsing
-
 -- Import Calculate module for testing
 import AkinfProject.Calculate
   ( MASignal (..),
@@ -40,6 +31,7 @@ import Data.ByteString.Lazy.Char8 qualified as BL
 import Data.Map.Strict qualified as Map
 import Data.Vector qualified as V
 import Data.Yaml (decodeFileEither)
+import PropertyTests (completePropertyTests)
 import Test.Tasty
 import Test.Tasty.HUnit
 
@@ -47,14 +39,16 @@ main :: IO ()
 main = defaultMain tests
 
 tests :: TestTree
-tests = testGroup "All Tests"
-  [ csvTests
-  , configTests
-  , calculateTests
-  , outputTests
-  , integrationTests
-  , completePropertyTests  -- Add property-based tests
-  ]
+tests =
+  testGroup
+    "All Tests"
+    [ csvTests,
+      configTests,
+      calculateTests,
+      outputTests,
+      integrationTests,
+      completePropertyTests -- Add property-based tests
+    ]
 
 -- CSV Parsing tests
 csvTests :: TestTree
@@ -305,7 +299,7 @@ calculateTests =
       testCase "calculateMovingAverages computes all SMAs" $ do
         let stocks =
               V.fromList $
-                replicate 250 $ -- Ensure we have enough data for SMA-200
+                replicate 250 $ -- Ensure we have enough data for SMA-200 -- Ensure we have enough data for SMA-200
                   Stock "2023-01-01" (Just 100.0) (Just 105.0) (Just 95.0) (Just 100.0) (Just 1000) "TEST"
 
             movingAvgs = calculateMovingAverages stocks
