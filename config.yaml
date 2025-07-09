@@ -1,6 +1,6 @@
 stocks:
-  - Stock_1
-  - Stock_2
+  - ADP
+  - GILD
 timeframe:
-  start_date: 2023-01-01
-  end_date: 2023-12-31
+  start_date: 2013-09-24
+  end_date: 2018-01-16
