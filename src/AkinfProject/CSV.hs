@@ -8,7 +8,6 @@ module AkinfProject.CSV
   , parseStocksFromBytes
   , loadStocksOptimized
   , loadStocksAdaptive
-  , loadStocksUltraFast
   ) where
 
 import qualified Data.ByteString.Lazy as BL
@@ -86,71 +85,11 @@ parseStocksStreaming bs =
     {-# INLINE forceStock #-}
     forceStock !stock = stock  -- Force evaluation of each Stock record
 
--- | Ultra-fast parsing with unboxed operations where possible
-parseStocksUltraFast :: BL.ByteString -> Either String (V.Vector Stock)
-parseStocksUltraFast = parseStocksFromBytes  -- For now, use standard parsing
-
 -- | Choose best parsing strategy based on file size
 loadStocksAdaptive :: FilePath -> IO (Either String (V.Vector Stock))
 loadStocksAdaptive path = do
     !csvData <- BL.readFile path
     let fileSize = BL.length csvData
     return $! if fileSize > 10000000  -- > 10MB, use streaming
-              then parseStocksStreaming csvData
-              else parseStocksOptimized csvData
-
--- | Ultra-fast custom parser bypassing cassava for maximum performance
--- This parser is specifically optimized for the known CSV format
--- NOTE: Currently disabled due to complexity - the adaptive approach provides good performance
-{-
-{-# INLINE parseStocksCustom #-}
-parseStocksCustom :: BL.ByteString -> Either String (V.Vector Stock)
-parseStocksCustom bs = 
-    case BLC.lines bs of
-        [] -> Right V.empty
-        (header:rows) -> 
-            if isValidHeader header
-            then Right $! V.fromList $! map parseStockRow $! filter (not . BL.null) rows
-            else Left "Invalid CSV header"
-  where
-    isValidHeader h = BLC.isInfixOf "date" h && BLC.isInfixOf "open" h && BLC.isInfixOf "Name" h
-    
-    parseStockRow :: BL.ByteString -> Stock
-    parseStockRow row = 
-        let fields = BLC.split ',' row
-        in case fields of
-            [dateField, openField, highField, lowField, closeField, volumeField, nameField] ->
-                Stock { date = T.strip (textFromBS dateField)
-                      , open = parseDoubleField openField
-                      , high = parseDoubleField highField  
-                      , low = parseDoubleField lowField
-                      , close = parseDoubleField closeField
-                      , volume = parseIntField volumeField
-                      , name = T.strip (textFromBS nameField)
-                      }
-            _ -> error ("Invalid CSV row: " ++ show row)
-    
-    textFromBS = TE.decodeUtf8 . BL.toStrict
-    
-    parseDoubleField field 
-        | BL.null field = Nothing
-        | otherwise = readMaybe (BLC.unpack field)
-    
-    parseIntField field
-        | BL.null field = Nothing  
-        | otherwise = readMaybe (BLC.unpack field)
-    
-    readMaybe :: Read a => String -> Maybe a
-    readMaybe s = case reads s of
-        [(x, "")] -> Just x
-        _ -> Nothing
--}
-
--- | Adaptive parser that chooses the best strategy
-loadStocksUltraFast :: FilePath -> IO (Either String (V.Vector Stock))
-loadStocksUltraFast path = do
-    !csvData <- BL.readFile path
-    let fileSize = BL.length csvData
-    return $! if fileSize > 20000000  -- > 20MB, use streaming parser  
               then parseStocksStreaming csvData
               else parseStocksOptimized csvData
