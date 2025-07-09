@@ -1,0 +1,6 @@
+[stocks]
+Stock_1 = ""
+Stock_2 = ""
+[timeframe]
+Start_Date = ""
+End_Date = ""
