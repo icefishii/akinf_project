@@ -4,6 +4,7 @@ module AkinfProject.Calculate where
 import AkinfProject.CSV (Stock(..))
 import qualified Data.Vector as V
 import qualified Data.Map.Strict as Map
+import qualified Data.Text as T
 import Data.Ord (comparing)
 
 -- | Trend direction enumeration
@@ -153,8 +154,8 @@ analyzeStock stockName stocks
                                  then (Nothing, Nothing)
                                  else let bestStock = V.maximumBy (comparing snd) stocksWithChanges
                                           worstStock = V.minimumBy (comparing snd) stocksWithChanges
-                                      in (Just (date (fst bestStock), snd bestStock),
-                                          Just (date (fst worstStock), snd worstStock))
+                                      in (Just (T.unpack (date (fst bestStock)), snd bestStock),
+                                          Just (T.unpack (date (fst worstStock)), snd worstStock))
           
           -- Calculate new metrics
           roi = calculateROI stocks

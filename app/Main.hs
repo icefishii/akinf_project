@@ -2,7 +2,7 @@ module Main where
 
 import qualified Data.Vector as V
 import qualified Data.Map.Strict as Map
-import AkinfProject.CSV (loadStocks, Stock(..))
+import AkinfProject.CSV (loadStocksAdaptive, Stock(..))
 import AkinfProject.Config (loadConfig)
 import AkinfProject.Filter (filterByConfig)
 import AkinfProject.Calculate (analyzePortfolio)
@@ -17,7 +17,7 @@ main = do
         putStrLn "Loaded config:"
         print config
 
-        stockResult <- loadStocks "all_stocks_5yr.csv"
+        stockResult <- loadStocksAdaptive "all_stocks_5yr.csv"
         case stockResult of
           Left err -> putStrLn ("CSV parse error: " ++ err)
           Right stocks -> do

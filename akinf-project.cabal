@@ -13,8 +13,11 @@ extra-doc-files:    CHANGELOG.md
 common warnings
     ghc-options: -Wall
 
+common optimizations
+    ghc-options: -O2 -funbox-strict-fields -fspecialise-aggressively
+
 library
-  import: warnings
+  import: warnings, optimizations
 
   exposed-modules:
       AkinfProject.CSV
@@ -34,12 +37,13 @@ library
       vector == 0.13.2.0,
       yaml == 0.11.11.2,
       time == 1.12.2,
+      deepseq >= 1.4.4 && < 1.6,
 
   default-language: GHC2021
 
 
 executable akinf-project
-  import:           warnings
+  import:           warnings, optimizations
 
   main-is:          Main.hs
   hs-source-dirs:   app
