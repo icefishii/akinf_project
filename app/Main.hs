@@ -5,6 +5,8 @@ import qualified Data.Map.Strict as Map
 import AkinfProject.CSV (loadStocks, Stock(..))
 import AkinfProject.Config (loadConfig)
 import AkinfProject.Filter (filterByConfig)
+import AkinfProject.Calculate (analyzeAllStocks)
+import AkinfProject.Output (displayAnalysis, displaySummary)
 
 main :: IO ()
 main = do
@@ -29,4 +31,10 @@ main = do
                   (Map.toList filtered)
 
             putStrLn $ "Total stocks after filtering: " ++ show (sum (map V.length (Map.elems filtered)))
+            
+            -- Perform analysis and display results
+            let analyses = analyzeAllStocks filtered
+            displayAnalysis analyses
+            displaySummary analyses
+            
             putStrLn "Done processing stocks."
