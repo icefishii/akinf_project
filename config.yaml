@@ -1,6 +1,8 @@
 stocks:
   - ADP
   - GILD
+  - AAPL
+  - MSFT
 timeframe:
   start_date: 2013-09-24
   end_date: 2018-01-16

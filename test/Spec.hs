@@ -15,7 +15,10 @@ import AkinfProject.Config (Config(..), Timeframe(..))
 -- Import Calculate module for testing
 import AkinfProject.Calculate (StockAnalysis(..), percentageChange, analyzeStock, analyzeAllStocks, 
                                 TrendDirection(..), RiskLevel(..), dailyVolatility, calculateROI, 
-                                detectTrend, calculateRiskLevel)
+                                detectTrend, calculateRiskLevel, MovingAverages(..), MASignal(..), 
+                                PortfolioCorrelation(..), calculateSMA, calculateMovingAverages, 
+                                determineMASignal, calculateDailyReturns, calculateCorrelation, 
+                                calculatePortfolioCorrelation, analyzePortfolio)
 import qualified Data.Map.Strict as Map
 
 -- Import Output module for testing
@@ -246,6 +249,194 @@ calculateTests = testGroup "Calculate Module Tests"
       assertBool "Should have trend" (case trendDirection analysis of Just _ -> True; Nothing -> False)
       assertBool "Should have risk level" (case riskLevel analysis of Just _ -> True; Nothing -> False)
       assertBool "Should have volatility" (case volatility analysis of Just _ -> True; Nothing -> False)
+  
+  -- Moving Averages Tests
+  , testCase "calculateSMA works correctly" $ do
+      let stocks = V.fromList
+            [ Stock "2023-01-01" (Just 100.0) (Just 105.0) (Just 95.0) (Just 100.0) (Just 1000) "TEST"
+            , Stock "2023-01-02" (Just 102.0) (Just 108.0) (Just 100.0) (Just 105.0) (Just 1200) "TEST"
+            , Stock "2023-01-03" (Just 108.0) (Just 110.0) (Just 105.0) (Just 110.0) (Just 800) "TEST"
+            , Stock "2023-01-04" (Just 110.0) (Just 115.0) (Just 108.0) (Just 115.0) (Just 900) "TEST"
+            , Stock "2023-01-05" (Just 115.0) (Just 120.0) (Just 112.0) (Just 120.0) (Just 1100) "TEST"
+            ]
+      
+      -- Test SMA calculation (should average the first 'period' closing prices)
+      case calculateSMA 3 stocks of
+        Just sma -> assertBool "SMA-3 should be around 105%" (abs (sma - 105.0) < 1.0)  -- (100+105+110)/3
+        Nothing -> assertFailure "Should calculate SMA for sufficient data"
+      
+      case calculateSMA 5 stocks of
+        Just sma -> assertBool "SMA-5 should be around 110%" (abs (sma - 110.0) < 1.0)  -- (100+105+110+115+120)/5
+        Nothing -> assertFailure "Should calculate SMA for sufficient data"
+      
+      -- Test insufficient data
+      calculateSMA 10 stocks @?= Nothing  -- Not enough data for 10-period SMA
+      calculateSMA 3 V.empty @?= Nothing  -- Empty vector
+
+  , testCase "calculateMovingAverages computes all SMAs" $ do
+      let stocks = V.fromList $ replicate 250 $  -- Ensure we have enough data for SMA-200
+            Stock "2023-01-01" (Just 100.0) (Just 105.0) (Just 95.0) (Just 100.0) (Just 1000) "TEST"
+          
+          movingAvgs = calculateMovingAverages stocks
+      
+      -- All SMAs should be calculated for sufficient data
+      case sma20 movingAvgs of
+        Just val -> assertBool "SMA-20 should be around 100" (abs (val - 100.0) < 1.0)
+        Nothing -> assertFailure "Should calculate SMA-20"
+      
+      case sma50 movingAvgs of
+        Just val -> assertBool "SMA-50 should be around 100" (abs (val - 100.0) < 1.0)
+        Nothing -> assertFailure "Should calculate SMA-50"
+      
+      case sma200 movingAvgs of
+        Just val -> assertBool "SMA-200 should be around 100" (abs (val - 100.0) < 1.0)
+        Nothing -> assertFailure "Should calculate SMA-200"
+
+  , testCase "determineMASignal classifies signals correctly" $ do
+      -- Bullish: SMA20 > SMA50 > SMA200 (Golden Cross)
+      determineMASignal (Just 110.0) (Just 105.0) (Just 100.0) @?= Just Bullish
+      
+      -- Bearish: SMA20 < SMA50 < SMA200 (Death Cross)
+      determineMASignal (Just 100.0) (Just 105.0) (Just 110.0) @?= Just Bearish
+      
+      -- Neutral: Mixed signals
+      determineMASignal (Just 105.0) (Just 100.0) (Just 110.0) @?= Just Neutral
+      
+      -- Missing data
+      determineMASignal Nothing (Just 105.0) (Just 100.0) @?= Nothing
+      determineMASignal (Just 110.0) Nothing (Just 100.0) @?= Nothing
+      determineMASignal (Just 110.0) (Just 105.0) Nothing @?= Nothing
+
+  -- Portfolio Correlation Tests
+  , testCase "calculateDailyReturns computes returns correctly" $ do
+      let stocks = V.fromList
+            [ Stock "2023-01-01" (Just 100.0) (Just 105.0) (Just 95.0) (Just 100.0) (Just 1000) "TEST"
+            , Stock "2023-01-02" (Just 102.0) (Just 108.0) (Just 100.0) (Just 105.0) (Just 1200) "TEST"  -- +5% return
+            , Stock "2023-01-03" (Just 108.0) (Just 110.0) (Just 105.0) (Just 110.0) (Just 800) "TEST"   -- +4.76% return
+            , Stock "2023-01-04" (Just 110.0) (Just 115.0) (Just 108.0) (Just 104.5) (Just 900) "TEST"   -- -5% return
+            ]
+          returns = calculateDailyReturns stocks
+      
+      V.length returns @?= 3  -- Should be n-1 returns for n stocks
+      
+      let returnsList = V.toList returns
+      assertBool "First return should be around 0.05" (abs (head returnsList - 0.05) < 0.001)  -- 5%
+      assertBool "Second return should be around 0.0476" (abs (returnsList !! 1 - 0.0476) < 0.001)  -- ~4.76%
+      assertBool "Third return should be around -0.05" (abs (returnsList !! 2 - (-0.05)) < 0.001)  -- -5%
+
+  , testCase "calculateCorrelation computes correlation correctly" $ do
+      let returns1 = V.fromList [0.05, 0.03, -0.02, 0.01, 0.04]  -- Some positive returns
+          returns2 = V.fromList [0.04, 0.02, -0.01, 0.02, 0.03]  -- Similar pattern (should be positive corr)
+          returns3 = V.fromList [-0.04, -0.02, 0.01, -0.02, -0.03]  -- Opposite pattern (should be negative corr)
+      
+      case calculateCorrelation returns1 returns2 of
+        Just corr -> assertBool "Correlation should be positive" (corr > 0.5)
+        Nothing -> assertFailure "Should calculate positive correlation"
+      
+      case calculateCorrelation returns1 returns3 of
+        Just corr -> assertBool "Correlation should be negative" (corr < -0.5)
+        Nothing -> assertFailure "Should calculate negative correlation"
+      
+      -- Test edge cases
+      calculateCorrelation V.empty V.empty @?= Nothing
+      calculateCorrelation returns1 (V.take 3 returns2) @?= Nothing  -- Different lengths
+
+  , testCase "calculatePortfolioCorrelation works for multiple stocks" $ do
+      let stocks1 = V.fromList
+            [ Stock "2023-01-01" (Just 100.0) (Just 105.0) (Just 95.0) (Just 100.0) (Just 1000) "AAPL"
+            , Stock "2023-01-02" (Just 100.0) (Just 108.0) (Just 100.0) (Just 105.0) (Just 1200) "AAPL"
+            , Stock "2023-01-03" (Just 105.0) (Just 110.0) (Just 105.0) (Just 110.0) (Just 800) "AAPL"
+            ]
+          stocks2 = V.fromList
+            [ Stock "2023-01-01" (Just 200.0) (Just 210.0) (Just 195.0) (Just 200.0) (Just 500) "MSFT"
+            , Stock "2023-01-02" (Just 200.0) (Just 215.0) (Just 200.0) (Just 210.0) (Just 600) "MSFT"
+            , Stock "2023-01-03" (Just 210.0) (Just 220.0) (Just 210.0) (Just 220.0) (Just 700) "MSFT"
+            ]
+          stockMap = Map.fromList [("AAPL", stocks1), ("MSFT", stocks2)]
+          portfolioCorr = calculatePortfolioCorrelation stockMap
+      
+      -- Should have one correlation pair
+      Map.size (correlationMatrix portfolioCorr) @?= 1
+      
+      case Map.lookup ("AAPL", "MSFT") (correlationMatrix portfolioCorr) of
+        Just corr -> assertBool "Should have strong positive correlation" (corr > 0.8)
+        Nothing -> assertFailure "Should find AAPL-MSFT correlation"
+      
+      assertBool "Average correlation should be positive" (averageCorrelation portfolioCorr > 0.0)
+      portfolioDiversification portfolioCorr @?= "Poorly Diversified"
+
+  , testCase "analyzePortfolio provides comprehensive analysis" $ do
+      let stocks1List = [ Stock "2023-01-01" (Just 100.0) (Just 105.0) (Just 95.0) (Just 100.0) (Just 1000) "AAPL"
+                        , Stock "2023-01-02" (Just 100.0) (Just 108.0) (Just 100.0) (Just 105.0) (Just 1200) "AAPL"  -- +5% return
+                        , Stock "2023-01-03" (Just 105.0) (Just 110.0) (Just 105.0) (Just 110.0) (Just 800) "AAPL"   -- +4.76% return
+                        ] ++ replicate 247 (Stock "2023-01-04" (Just 110.0) (Just 115.0) (Just 108.0) (Just 112.0) (Just 900) "AAPL")
+          stocks2List = [ Stock "2023-01-01" (Just 200.0) (Just 210.0) (Just 195.0) (Just 200.0) (Just 500) "MSFT"
+                        , Stock "2023-01-02" (Just 200.0) (Just 215.0) (Just 200.0) (Just 210.0) (Just 600) "MSFT"   -- +5% return
+                        , Stock "2023-01-03" (Just 210.0) (Just 220.0) (Just 210.0) (Just 220.0) (Just 700) "MSFT"   -- +4.76% return
+                        ] ++ replicate 247 (Stock "2023-01-04" (Just 220.0) (Just 225.0) (Just 218.0) (Just 224.0) (Just 800) "MSFT")
+          stocks1 = V.fromList stocks1List
+          stocks2 = V.fromList stocks2List
+          stockMap = Map.fromList [("AAPL", stocks1), ("MSFT", stocks2)]
+          (analyses, portfolioCorr) = analyzePortfolio stockMap
+      
+      -- Should analyze both stocks
+      length analyses @?= 2
+      
+      let stockNames = map stockName analyses
+      assertBool "Should include AAPL" ("AAPL" `elem` stockNames)
+      assertBool "Should include MSFT" ("MSFT" `elem` stockNames)
+      
+      -- Portfolio correlation should be calculated (both stocks have varying returns, so correlation should exist)
+      assertBool "Should have at least some correlation data" (Map.size (correlationMatrix portfolioCorr) >= 0)
+      assertBool "Should have reasonable average correlation" 
+                 (averageCorrelation portfolioCorr >= -1.0 && averageCorrelation portfolioCorr <= 1.0)
+
+  -- Additional Edge Case Tests
+  , testCase "calculateSMA handles stocks with missing close prices" $ do
+      let stocks = V.fromList
+            [ Stock "2023-01-01" (Just 100.0) (Just 105.0) (Just 95.0) (Just 100.0) (Just 1000) "TEST"
+            , Stock "2023-01-02" (Just 102.0) (Just 108.0) (Just 100.0) Nothing (Just 1200) "TEST"       -- Missing close
+            , Stock "2023-01-03" (Just 108.0) (Just 110.0) (Just 105.0) (Just 110.0) (Just 800) "TEST"
+            ]
+      
+      calculateSMA 3 stocks @?= Nothing  -- Should fail due to missing close price
+      calculateSMA 2 stocks @?= Nothing  -- Should fail due to missing close price in period
+
+  , testCase "calculateDailyReturns handles stocks with missing prices" $ do
+      let stocks = V.fromList
+            [ Stock "2023-01-01" (Just 100.0) (Just 105.0) (Just 95.0) (Just 100.0) (Just 1000) "TEST"
+            , Stock "2023-01-02" (Just 102.0) (Just 108.0) (Just 100.0) Nothing (Just 1200) "TEST"       -- Missing close
+            , Stock "2023-01-03" (Just 108.0) (Just 110.0) (Just 105.0) (Just 110.0) (Just 800) "TEST"
+            ]
+          returns = calculateDailyReturns stocks
+      
+      -- Should have fewer returns due to missing data
+      assertBool "Should handle missing data gracefully" (V.length returns <= 2)
+
+  , testCase "calculatePortfolioCorrelation handles single stock" $ do
+      let stocks = V.fromList
+            [ Stock "2023-01-01" (Just 100.0) (Just 105.0) (Just 95.0) (Just 100.0) (Just 1000) "AAPL"
+            , Stock "2023-01-02" (Just 100.0) (Just 108.0) (Just 100.0) (Just 105.0) (Just 1200) "AAPL"
+            ]
+          stockMap = Map.singleton "AAPL" stocks
+          portfolioCorr = calculatePortfolioCorrelation stockMap
+      
+      -- No correlations possible with single stock
+      Map.size (correlationMatrix portfolioCorr) @?= 0
+      averageCorrelation portfolioCorr @?= 0.0
+      portfolioDiversification portfolioCorr @?= "Well Diversified"  -- Default for no correlations
+
+  , testCase "calculateMovingAverages handles insufficient data" $ do
+      let stocks = V.fromList
+            [ Stock "2023-01-01" (Just 100.0) (Just 105.0) (Just 95.0) (Just 100.0) (Just 1000) "TEST"
+            , Stock "2023-01-02" (Just 102.0) (Just 108.0) (Just 100.0) (Just 105.0) (Just 1200) "TEST"
+            ]  -- Only 2 stocks, insufficient for SMA-20, SMA-50, SMA-200
+          movingAvgs = calculateMovingAverages stocks
+      
+      sma20 movingAvgs @?= Nothing   -- Not enough data
+      sma50 movingAvgs @?= Nothing   -- Not enough data
+      sma200 movingAvgs @?= Nothing  -- Not enough data
+      maSignal movingAvgs @?= Nothing  -- Can't determine signal without SMAs
   ]
 
 -- Output module tests

@@ -1,8 +1,10 @@
 {-# LANGUAGE DeriveGeneric #-}
 module AkinfProject.Output where
 
-import AkinfProject.Calculate (StockAnalysis(..), TrendDirection(..), RiskLevel(..))
+import AkinfProject.Calculate (StockAnalysis(..), TrendDirection(..), RiskLevel(..), 
+                                MovingAverages(..), MASignal(..), PortfolioCorrelation(..))
 import Text.Printf (printf)
+import qualified Data.Map as Map
 
 -- | Display analysis results for all stocks
 displayAnalysis :: [StockAnalysis] -> IO ()
@@ -20,7 +22,7 @@ displayAnalysis analyses = do
 
 -- | Display analysis for a single stock
 displayStockAnalysis :: StockAnalysis -> IO ()
-displayStockAnalysis (StockAnalysis stockName bestDay worstDay roi trend risk volatility) = do
+displayStockAnalysis (StockAnalysis stockName bestDay worstDay roi trend risk volatility movingAvgs) = do
   putStrLn $ "Stock: " ++ stockName
   putStrLn $ "  " ++ replicate (length stockName + 6) '-'
   
@@ -54,6 +56,9 @@ displayStockAnalysis (StockAnalysis stockName bestDay worstDay roi trend risk vo
     Just riskValue -> 
       putStrLn $ "  Risk Level: " ++ show riskValue ++ formatRiskDescription riskValue
   
+  -- Display moving averages
+  displayMovingAverages movingAvgs
+  
   putStrLn ""
 
 -- | Format percentage change for display
@@ -65,6 +70,72 @@ formatRiskDescription :: RiskLevel -> String
 formatRiskDescription Low = " (Conservative investment)"
 formatRiskDescription Medium = " (Moderate risk/reward)"
 formatRiskDescription High = " (High risk/high reward)"
+
+-- | Display moving averages analysis
+displayMovingAverages :: MovingAverages -> IO ()
+displayMovingAverages (MovingAverages sma20 sma50 sma200 signal) = do
+  putStrLn "  Moving Averages:"
+  case sma20 of
+    Nothing -> putStrLn "    SMA 20:  No data available"
+    Just val -> putStrLn $ printf "    SMA 20:  $%.2f" val
+  
+  case sma50 of
+    Nothing -> putStrLn "    SMA 50:  No data available"  
+    Just val -> putStrLn $ printf "    SMA 50:  $%.2f" val
+  
+  case sma200 of
+    Nothing -> putStrLn "    SMA 200: No data available"
+    Just val -> putStrLn $ printf "    SMA 200: $%.2f" val
+  
+  case signal of
+    Nothing -> putStrLn "    Signal:  No data available"
+    Just sig -> putStrLn $ "    Signal:  " ++ show sig ++ formatSignalDescription sig
+
+-- | Add descriptive text for MA signals
+formatSignalDescription :: MASignal -> String
+formatSignalDescription Bullish = " (Strong buy signal)"
+formatSignalDescription Bearish = " (Strong sell signal)"  
+formatSignalDescription Neutral = " (Hold/neutral)"
+
+-- | Display portfolio correlation analysis
+displayPortfolioCorrelation :: PortfolioCorrelation -> IO ()
+displayPortfolioCorrelation (PortfolioCorrelation corrMatrix avgCorr diversification) = do
+  putStrLn "\n=========================================="
+  putStrLn "       PORTFOLIO CORRELATION ANALYSIS"
+  putStrLn "=========================================="
+  
+  putStrLn "\nStock Correlations:"
+  if Map.null corrMatrix
+    then putStrLn "  No correlation data available (need at least 2 stocks)"
+    else do
+      mapM_ displayCorrelationPair (Map.toList corrMatrix)
+      putStrLn ""
+      putStrLn $ printf "Average Correlation: %.3f" avgCorr
+      putStrLn $ "Portfolio Diversification: " ++ diversification
+      putStrLn $ "  " ++ interpretDiversification diversification
+  
+  putStrLn "=========================================="
+
+-- | Display individual correlation pair
+displayCorrelationPair :: ((String, String), Double) -> IO ()
+displayCorrelationPair ((stock1, stock2), corr) = 
+  putStrLn $ printf "  %s <-> %s: %.3f %s" stock1 stock2 corr (interpretCorrelation corr)
+
+-- | Interpret correlation strength
+interpretCorrelation :: Double -> String
+interpretCorrelation corr
+  | abs corr > 0.8 = "(Very Strong)"
+  | abs corr > 0.6 = "(Strong)"
+  | abs corr > 0.4 = "(Moderate)"
+  | abs corr > 0.2 = "(Weak)"
+  | otherwise = "(Very Weak)"
+
+-- | Interpret diversification level
+interpretDiversification :: String -> String
+interpretDiversification "Well Diversified" = "[Good] Good risk spread across different market movements"
+interpretDiversification "Moderately Diversified" = "[Caution] Moderate risk spread, consider more diverse holdings"
+interpretDiversification "Poorly Diversified" = "[Warning] High risk - stocks move together, limited protection"
+interpretDiversification _ = "Unknown diversification level"
 
 -- | Display summary statistics
 displaySummary :: [StockAnalysis] -> IO ()
@@ -79,10 +150,10 @@ displaySummary analyses = do
   
   if not (null validAnalyses)
     then do
-      let allGains = [gain | StockAnalysis _ (Just (_, gain)) _ _ _ _ _ <- validAnalyses]
-          allLosses = [loss | StockAnalysis _ _ (Just (_, loss)) _ _ _ _ <- validAnalyses]
-          allROIs = [roi | StockAnalysis _ _ _ (Just roi) _ _ _ <- validAnalyses]
-          allVolatilities = [vol | StockAnalysis _ _ _ _ _ _ (Just vol) <- validAnalyses]
+      let allGains = [gain | StockAnalysis _ (Just (_, gain)) _ _ _ _ _ _ <- validAnalyses]
+          allLosses = [loss | StockAnalysis _ _ (Just (_, loss)) _ _ _ _ _ <- validAnalyses]
+          allROIs = [roi | StockAnalysis _ _ _ (Just roi) _ _ _ _ <- validAnalyses]
+          allVolatilities = [vol | StockAnalysis _ _ _ _ _ _ (Just vol) _ <- validAnalyses]
       
       when (not (null allGains)) $ do
         let maxGain = maximum allGains
@@ -115,20 +186,20 @@ displaySummary analyses = do
       putStrLn "  No valid data found for analysis."
   
   where
-    hasValidData (StockAnalysis _ bestDay worstDay _ _ _ _) = 
+    hasValidData (StockAnalysis _ bestDay worstDay _ _ _ _ _) = 
       case (bestDay, worstDay) of
         (Just _, _) -> True
         (_, Just _) -> True
         _ -> False
     
-    countRisks (StockAnalysis _ _ _ _ _ (Just Low) _) (l, m, h) = (l+1, m, h)
-    countRisks (StockAnalysis _ _ _ _ _ (Just Medium) _) (l, m, h) = (l, m+1, h)
-    countRisks (StockAnalysis _ _ _ _ _ (Just High) _) (l, m, h) = (l, m, h+1)
+    countRisks (StockAnalysis _ _ _ _ _ (Just Low) _ _) (l, m, h) = (l+1, m, h)
+    countRisks (StockAnalysis _ _ _ _ _ (Just Medium) _ _) (l, m, h) = (l, m+1, h)
+    countRisks (StockAnalysis _ _ _ _ _ (Just High) _ _) (l, m, h) = (l, m, h+1)
     countRisks _ counts = counts
     
-    countTrends (StockAnalysis _ _ _ _ (Just Upward) _ _) (u, d, s) = (u+1, d, s)
-    countTrends (StockAnalysis _ _ _ _ (Just Downward) _ _) (u, d, s) = (u, d+1, s)
-    countTrends (StockAnalysis _ _ _ _ (Just Sideways) _ _) (u, d, s) = (u, d, s+1)
+    countTrends (StockAnalysis _ _ _ _ (Just Upward) _ _ _) (u, d, s) = (u+1, d, s)
+    countTrends (StockAnalysis _ _ _ _ (Just Downward) _ _ _) (u, d, s) = (u, d+1, s)
+    countTrends (StockAnalysis _ _ _ _ (Just Sideways) _ _ _) (u, d, s) = (u, d, s+1)
     countTrends _ counts = counts
     
     formatRiskDistribution (low, med, high) = 
