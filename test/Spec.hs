@@ -13,7 +13,9 @@ import Data.Yaml (decodeFileEither)
 import AkinfProject.Config (Config(..), Timeframe(..))
 
 -- Import Calculate module for testing
-import AkinfProject.Calculate (StockAnalysis(..), percentageChange, analyzeStock, analyzeAllStocks)
+import AkinfProject.Calculate (StockAnalysis(..), percentageChange, analyzeStock, analyzeAllStocks, 
+                                TrendDirection(..), RiskLevel(..), dailyVolatility, calculateROI, 
+                                detectTrend, calculateRiskLevel)
 import qualified Data.Map.Strict as Map
 
 -- Import Output module for testing
@@ -154,6 +156,96 @@ calculateTests = testGroup "Calculate Module Tests"
   , testCase "analyzeAllStocks handles empty map" $ do
       let analyses = analyzeAllStocks Map.empty
       length analyses @?= 0
+
+  , testCase "dailyVolatility calculates correctly" $ do
+      let stock1 = Stock "2023-01-01" (Just 100.0) (Just 110.0) (Just 95.0) (Just 105.0) (Just 1000) "TEST"  -- (110-95)/100 = 15%
+          stock2 = Stock "2023-01-02" (Just 50.0) (Just 52.0) (Just 48.0) (Just 49.0) (Just 2000) "TEST"    -- (52-48)/50 = 8%
+          stock3 = Stock "2023-01-03" Nothing Nothing Nothing Nothing Nothing "TEST"                         -- No data
+      
+      case dailyVolatility stock1 of
+        Just vol -> assertBool "Volatility should be 15%" (abs (vol - 15.0) < 0.1)
+        Nothing -> assertFailure "Should calculate volatility"
+      
+      case dailyVolatility stock2 of
+        Just vol -> assertBool "Volatility should be 8%" (abs (vol - 8.0) < 0.1)
+        Nothing -> assertFailure "Should calculate volatility"
+      
+      dailyVolatility stock3 @?= Nothing
+
+  , testCase "calculateROI works correctly" $ do
+      let stocks = V.fromList
+            [ Stock "2023-01-01" (Just 100.0) (Just 105.0) (Just 95.0) (Just 102.0) (Just 1000) "TEST"
+            , Stock "2023-01-02" (Just 102.0) (Just 108.0) (Just 100.0) (Just 107.0) (Just 1200) "TEST"
+            , Stock "2023-01-03" (Just 107.0) (Just 109.0) (Just 105.0) (Just 108.0) (Just 800) "TEST"
+            ]
+      case calculateROI stocks of
+        Just roi -> assertBool "ROI should be around 5.88%" (abs (roi - 5.88) < 1.0)  -- (108-102)/102 * 100
+        Nothing -> assertFailure "Should calculate ROI"
+      
+      -- Test empty vector
+      calculateROI V.empty @?= Nothing
+      
+      -- Test single stock (should be 0% ROI)
+      let singleStock = V.fromList [Stock "2023-01-01" (Just 100.0) (Just 105.0) (Just 95.0) (Just 102.0) (Just 1000) "TEST"]
+      calculateROI singleStock @?= Just 0.0
+
+  , testCase "detectTrend classifies trends correctly" $ do
+      let upwardStocks = V.fromList
+            [ Stock "2023-01-01" (Just 100.0) (Just 105.0) (Just 95.0) (Just 102.0) (Just 1000) "TEST"
+            , Stock "2023-01-03" (Just 102.0) (Just 109.0) (Just 105.0) (Just 112.0) (Just 800) "TEST"  -- +9.8% ROI
+            ]
+          downwardStocks = V.fromList
+            [ Stock "2023-01-01" (Just 100.0) (Just 105.0) (Just 95.0) (Just 102.0) (Just 1000) "TEST"
+            , Stock "2023-01-03" (Just 102.0) (Just 105.0) (Just 90.0) (Just 92.0) (Just 800) "TEST"    -- -9.8% ROI
+            ]
+          sidewaysStocks = V.fromList
+            [ Stock "2023-01-01" (Just 100.0) (Just 105.0) (Just 95.0) (Just 102.0) (Just 1000) "TEST"
+            , Stock "2023-01-03" (Just 102.0) (Just 105.0) (Just 99.0) (Just 103.0) (Just 800) "TEST"   -- +0.98% ROI
+            ]
+      
+      detectTrend upwardStocks @?= Just Upward
+      detectTrend downwardStocks @?= Just Downward
+      detectTrend sidewaysStocks @?= Just Sideways
+
+  , testCase "calculateRiskLevel assesses risk correctly" $ do
+      let lowRiskStocks = V.fromList
+            [ Stock "2023-01-01" (Just 100.0) (Just 102.0) (Just 99.0) (Just 101.0) (Just 1000) "TEST"   -- 3% volatility
+            , Stock "2023-01-02" (Just 101.0) (Just 103.0) (Just 100.0) (Just 102.0) (Just 1200) "TEST"  -- ~3% volatility
+            ]
+          highRiskStocks = V.fromList
+            [ Stock "2023-01-01" (Just 100.0) (Just 115.0) (Just 85.0) (Just 105.0) (Just 1000) "TEST"   -- 30% volatility
+            , Stock "2023-01-02" (Just 105.0) (Just 120.0) (Just 90.0) (Just 110.0) (Just 1200) "TEST"   -- ~28% volatility
+            ]
+      
+      let (lowVol, lowRisk) = calculateRiskLevel lowRiskStocks
+          (highVol, highRisk) = calculateRiskLevel highRiskStocks
+      
+      lowRisk @?= Just Low
+      highRisk @?= Just High
+      
+      case lowVol of
+        Just vol -> assertBool "Low volatility should be under 4%" (vol < 4.0)
+        Nothing -> assertFailure "Should calculate volatility"
+      
+      case highVol of
+        Just vol -> assertBool "High volatility should be over 8%" (vol > 8.0)
+        Nothing -> assertFailure "Should calculate volatility"
+
+  , testCase "analyzeStock includes all new metrics" $ do
+      let stocks = V.fromList
+            [ Stock "2023-01-01" (Just 100.0) (Just 105.0) (Just 95.0) (Just 102.0) (Just 1000) "AAPL"  -- +2%
+            , Stock "2023-01-02" (Just 102.0) (Just 112.0) (Just 98.0) (Just 108.0) (Just 1200) "AAPL" -- +5.88%
+            , Stock "2023-01-03" (Just 108.0) (Just 110.0) (Just 105.0) (Just 106.0) (Just 800) "AAPL"  -- -1.85%
+            ]
+          analysis = analyzeStock "AAPL" stocks
+      
+      stockName analysis @?= "AAPL"
+      
+      -- Check that all metrics are calculated
+      assertBool "Should have ROI" (case totalROI analysis of Just _ -> True; Nothing -> False)
+      assertBool "Should have trend" (case trendDirection analysis of Just _ -> True; Nothing -> False)
+      assertBool "Should have risk level" (case riskLevel analysis of Just _ -> True; Nothing -> False)
+      assertBool "Should have volatility" (case volatility analysis of Just _ -> True; Nothing -> False)
   ]
 
 -- Output module tests
@@ -194,6 +286,12 @@ integrationTests = testGroup "Integration Tests"
           date @?= "2023-01-02"
           assertBool "Worst day should be around -6.35%" (abs (pct - (-6.35)) < 0.1)
         Nothing -> assertFailure "Should have found a worst day"
+      
+      -- Check new metrics are present
+      assertBool "Should have ROI" (case totalROI analysis of Just _ -> True; Nothing -> False)
+      assertBool "Should have trend" (case trendDirection analysis of Just _ -> True; Nothing -> False)
+      assertBool "Should have risk" (case riskLevel analysis of Just _ -> True; Nothing -> False)
+      assertBool "Should have volatility" (case volatility analysis of Just _ -> True; Nothing -> False)
 
   , testCase "Handles mixed valid and invalid stock data" $ do
       let stocks = V.fromList
