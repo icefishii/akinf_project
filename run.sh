@@ -56,7 +56,7 @@ if [ ! -f "akinf-project.cabal" ]; then
 fi
 
 # Update package index
-print_status "[1/4] Updating Cabal package index..."
+print_status "[1/5] Updating Cabal package index..."
 if cabal update; then
     print_success "Package index updated successfully."
 else
@@ -66,7 +66,7 @@ fi
 echo
 
 # Build the project
-print_status "[2/4] Building the project..."
+print_status "[2/5] Building the project..."
 if cabal build --enable-optimization; then
     print_success "Build completed successfully."
 else
@@ -76,7 +76,7 @@ fi
 echo
 
 # Run comprehensive test suite
-print_status "[3/4] Running test suite (29 tests)..."
+print_status "[3/5] Running test suite (29 tests)..."
 if cabal test --enable-optimization; then
     print_success "All tests passed successfully!"
 else
@@ -84,8 +84,17 @@ else
 fi
 echo
 
+# Run Benchmarks
+print_status "[4/5] Running Benchmarks..."
+if cabal bench --enable-optimization; then
+    print_success "All Benchmarks executed successfully!"
+else
+    print_warning "WARNING: Some Benchmarks failed - but continuing with execution"
+fi
+echo
+
 # Run the application
-print_status "[4/4] Running stock analysis application..."
+print_status "[5/5] Running stock analysis application..."
 echo
 echo "=========================================="
 echo "          APPLICATION OUTPUT"
@@ -107,6 +116,7 @@ if cabal run akinf-project --enable-optimization; then
     echo
     echo "To run again: ./run.sh or use 'cabal run akinf-project'"
     echo "To run tests only: use 'cabal test'"
+    echo "To run benchmarks only: use 'cabal bench'"
     echo
 else
     print_error "ERROR: Application execution failed"
