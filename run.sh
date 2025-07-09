@@ -67,7 +67,7 @@ echo
 
 # Build the project
 print_status "[2/4] Building the project..."
-if cabal build; then
+if cabal build --enable-optimization; then
     print_success "Build completed successfully."
 else
     print_error "ERROR: Build failed"
@@ -77,7 +77,7 @@ echo
 
 # Run comprehensive test suite
 print_status "[3/4] Running test suite (29 tests)..."
-if cabal test; then
+if cabal test --enable-optimization; then
     print_success "All tests passed successfully!"
 else
     print_warning "WARNING: Some tests failed - but continuing with execution"
@@ -91,7 +91,7 @@ echo "=========================================="
 echo "          APPLICATION OUTPUT"
 echo "=========================================="
 
-if cabal run akinf-project; then
+if cabal run akinf-project --enable-optimization; then
     echo
     echo "=========================================="
     echo "           EXECUTION COMPLETE"

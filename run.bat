@@ -35,7 +35,7 @@ echo.
 
 REM Build the project
 echo [2/4] Building the project...
-cabal build
+cabal build --enable-optimization
 if %ERRORLEVEL% NEQ 0 (
     echo ERROR: Build failed
     pause
@@ -46,7 +46,7 @@ echo.
 
 REM Run comprehensive test suite
 echo [3/4] Running test suite ^(29 tests^)...
-cabal test
+cabal test --enable-optimization
 if %ERRORLEVEL% NEQ 0 (
     echo WARNING: Some tests failed - but continuing with execution
     echo.
@@ -61,7 +61,7 @@ echo.
 echo ==========================================
 echo           APPLICATION OUTPUT
 echo ==========================================
-cabal run akinf-project
+cabal run akinf-project --enable-optimization
 if %ERRORLEVEL% NEQ 0 (
     echo ERROR: Application execution failed
     pause
