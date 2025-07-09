@@ -73,3 +73,19 @@ test-suite akinf-project-tests
       tasty == 1.5,
       tasty-hunit == 0.10.0.3,
   default-language: GHC2021
+
+benchmark akinf-project-benchmark
+  import:           warnings
+
+  type:             exitcode-stdio-1.0
+  main-is:          Bench.hs
+  hs-source-dirs:   bench
+
+  build-depends:
+      yaml ^>=0.11.11.2,
+      base >= 4.18.3.0 && < 5,
+      akinf-project,
+      criterion ^>= 1.6,
+      bytestring == 0.11.5.4,
+
+  default-language: GHC2021
