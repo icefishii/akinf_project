@@ -7,9 +7,7 @@ import AkinfProject.CSV (Stock(..))
 import Data.Time (parseTimeM, defaultTimeLocale, Day)
 import qualified Data.Vector as V
 import qualified Data.Map.Strict as Map
-import Data.Maybe (mapMaybe)
 import qualified Data.Text as T
-import Data.Char (toUpper)
 
 -- Normalize stock names to uppercase and trim whitespace
 normalize :: String -> String
