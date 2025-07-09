@@ -19,6 +19,8 @@ library
   exposed-modules:
       AkinfProject.CSV
       AkinfProject.Config
+      AkinfProject.Calculate
+      AkinfProject.Output
 
   hs-source-dirs: src
 
