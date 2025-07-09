@@ -3,6 +3,9 @@
 import Test.Tasty
 import Test.Tasty.HUnit
 
+-- Import property tests
+import PropertyTests (completePropertyTests)
+
 -- Import your CSV test functions
 import AkinfProject.CSV (parseStocksFromBytes, Stock(..))
 import qualified Data.ByteString.Lazy.Char8 as BL
@@ -34,6 +37,7 @@ tests = testGroup "All Tests"
   , calculateTests
   , outputTests
   , integrationTests
+  , completePropertyTests  -- Add property-based tests
   ]
 
 -- CSV Parsing tests

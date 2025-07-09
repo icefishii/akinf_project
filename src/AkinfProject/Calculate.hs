@@ -199,7 +199,7 @@ calculateCorrelation returns1 returns2
           sumSq2 = V.sum $ V.map (\x -> (x - mean2) ^ (2 :: Int)) returns2
           denominator = sqrt (sumSq1 * sumSq2)
       in if denominator == 0 then Nothing
-         else Just (numerator / denominator)
+         else Just (max (-1.0) (min 1.0 (numerator / denominator)))  -- Clamp to [-1, 1]
 
 -- | Calculate portfolio correlation matrix
 calculatePortfolioCorrelation :: Map.Map String (V.Vector Stock) -> PortfolioCorrelation
