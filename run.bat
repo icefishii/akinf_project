@@ -23,7 +23,7 @@ if %ERRORLEVEL% NEQ 0 (
 )
 
 REM Update package index
-echo [1/4] Updating Cabal package index...
+echo [1/5] Updating Cabal package index...
 cabal update
 if %ERRORLEVEL% NEQ 0 (
     echo ERROR: Failed to update package index
@@ -34,8 +34,8 @@ echo Package index updated successfully.
 echo.
 
 REM Build the project
-echo [2/4] Building the project...
-cabal build
+echo [2/5] Building the project...
+cabal build --enable-optimization
 if %ERRORLEVEL% NEQ 0 (
     echo ERROR: Build failed
     pause
@@ -45,8 +45,8 @@ echo Build completed successfully.
 echo.
 
 REM Run comprehensive test suite
-echo [3/4] Running test suite ^(29 tests^)...
-cabal test
+echo [3/5] Running test suite ^(29 tests^)...
+cabal test --enable-optimization
 if %ERRORLEVEL% NEQ 0 (
     echo WARNING: Some tests failed - but continuing with execution
     echo.
@@ -55,13 +55,24 @@ if %ERRORLEVEL% NEQ 0 (
     echo.
 )
 
+REM Run comprehensive benchmarks
+echo [4/5] Running Benchmarks...
+cabal bench --enable-optimization
+if %ERRORLEVEL% NEQ 0 (
+    echo WARNING: Some Benchmarks failed - but continuing with execution
+    echo.
+) else (
+    echo All Benchmarks executed successfully!
+    echo.
+)
+
 REM Run the application
-echo [4/4] Running stock analysis application...
+echo [5/5] Running stock analysis application...
 echo.
 echo ==========================================
 echo           APPLICATION OUTPUT
 echo ==========================================
-cabal run akinf-project
+cabal run akinf-project --enable-optimization
 if %ERRORLEVEL% NEQ 0 (
     echo ERROR: Application execution failed
     pause
